@@ -1,4 +1,3 @@
-cat > src/ingestion/generate_orders.py << 'EOF'
 import pandas as pd
 from faker import Faker
 import random
@@ -6,13 +5,12 @@ from datetime import datetime, timedelta
 import os
 from google.cloud import storage
 
-# === CONFIG (picks up from your environment) ===
-PROJECT_ID = "playground-s-11-fd77345f"   # <-- YOUR PROJECT ID
+# === CONFIG ===
+PROJECT_ID = "playground-s-11-fd77345f"
 BUCKET_NAME = f"retail-raw-{PROJECT_ID}"
 fake = Faker()
 
 def generate_daily_orders(date, num_orders=200):
-    """Generate fake orders for a single day"""
     data = []
     for _ in range(num_orders):
         data.append({
@@ -30,7 +28,6 @@ def generate_daily_orders(date, num_orders=200):
     return pd.DataFrame(data)
 
 def upload_to_gcs(df, date, channel):
-    """Upload DataFrame to GCS with partitioned folder structure"""
     blob_path = f"date={date.strftime('%Y-%m-%d')}/channel={channel}/orders.csv"
     temp_file = f"/tmp/orders_{date.strftime('%Y%m%d')}_{channel}.csv"
     df.to_csv(temp_file, index=False)
@@ -54,4 +51,3 @@ if __name__ == "__main__":
             upload_to_gcs(df, date, channel)
     
     print("✅ Done! All 30 days of data uploaded to GCS.")
-EOF
