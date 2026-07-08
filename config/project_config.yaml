@@ -1,0 +1,6 @@
+cat > config/project_config.yaml << 'EOF'
+project_id: "playground-s-11-fd77345f"
+region: "us-central1"
+bucket_raw: "retail-raw-playground-s-11-fd77345f"
+dataset_warehouse: "retail_warehouse"
+EOF
