@@ -1,19 +1,25 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, sum as spark_sum, lit, when, input_file_name
 import subprocess
-import os
 
-# === HARDCODE YOUR PROJECT ID (REPLACE WITH YOUR ACTUAL ID) ===
-PROJECT_ID = "playground-s-11-4db4d9ec"   # <-- CHANGE THIS IF DIFFERENT
+# === AUTO-DETECT PROJECT ID (NO NEED TO EDIT MANUALLY) ===
+try:
+    PROJECT_ID = subprocess.check_output(['gcloud', 'config', 'get-value', 'project']).decode().strip()
+except:
+    # Fallback in case gcloud fails (just hardcode it here if you want)
+    PROJECT_ID = "YOUR_PROJECT_ID_HERE"  # <-- Only change this if auto-detect fails
+
 BUCKET_NAME = f"retail-raw-{PROJECT_ID}"
 INPUT_PATH = f"gs://{BUCKET_NAME}/date=*/channel=*/orders.csv"
 STAGING_PATH = f"gs://{BUCKET_NAME}/staging/"
 QUARANTINE_PATH = f"gs://{BUCKET_NAME}/quarantine/"
 
+print(f"🔍 Project ID: {PROJECT_ID}")
 print(f"🔍 Reading data from: {INPUT_PATH}")
 
 # === GET ACCESS TOKEN FROM GCLOUD ===
 access_token = subprocess.check_output(['gcloud', 'auth', 'print-access-token']).decode().strip()
+print("✅ Retrieved access token")
 
 # === INIT SPARK WITH GCS CONNECTOR + ACCESS TOKEN ===
 spark = SparkSession.builder \
@@ -69,7 +75,7 @@ df_failed = df_flagged.filter(col("dq_failed") == True).drop("dq_failed")
 print(f"✅ Passed: {df_passed.count()} rows")
 print(f"❌ Failed: {df_failed.count()} rows")
 
-# === WRITE ===
+# === WRITE TO GCS ===
 if df_passed.count() > 0:
     df_passed.write.mode("overwrite").option("header", True).csv(STAGING_PATH)
     print(f"✅ Wrote passed data to: {STAGING_PATH}")
