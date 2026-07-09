@@ -20,6 +20,7 @@ spark = SparkSession.builder \
     .appName("RetailDQ") \
     .config("spark.hadoop.fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem") \
     .config("spark.hadoop.fs.AbstractFileSystem.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS") \
+    .config("spark.hadoop.fs.gs.project.id", PROJECT_ID) \
     .config("spark.hadoop.fs.gs.auth.service.account.enable", "false") \
     .config("spark.hadoop.fs.gs.auth.access.token.enable", "true") \
     .config("spark.hadoop.fs.gs.auth.access.token", access_token) \
