@@ -6,7 +6,7 @@ import os
 from google.cloud import storage
 
 # === CONFIG ===
-PROJECT_ID = "playground-s-11-4db4d9ec"
+PROJECT_ID = "playground-s-11-4867fce3"
 BUCKET_NAME = f"retail-raw-{PROJECT_ID}"
 fake = Faker()
 
