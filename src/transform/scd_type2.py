@@ -26,20 +26,24 @@ OUTPUT_BASE = f"gs://{BUCKET_NAME}/transform/"
 print(f"🔍 Project ID: {PROJECT_ID}")
 print(f"🔍 Output base: {OUTPUT_BASE}")
 
-# === GET ACCESS TOKEN ===
-access_token = subprocess.check_output(['gcloud', 'auth', 'print-access-token']).decode().strip()
-print("✅ Retrieved access token")
-
-# === INIT SPARK ===
-spark = SparkSession.builder \
-    .appName("SCDType2_StarSchema") \
-    .config("spark.hadoop.fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem") \
-    .config("spark.hadoop.fs.AbstractFileSystem.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS") \
-    .config("spark.hadoop.fs.gs.project.id", PROJECT_ID) \
-    .config("spark.hadoop.fs.gs.auth.service.account.enable", "false") \
-    .config("spark.hadoop.fs.gs.auth.access.token.enable", "true") \
-    .config("spark.hadoop.fs.gs.auth.access.token", access_token) \
+# === CREATE SPARK SESSION ===
+ADC_PATH = "/tmp/tmp.d1fW6vl8XD/application_default_credentials.json"
+spark = (
+    SparkSession.builder
+    .appName("SCDType2_StarSchema")
+    .config("spark.hadoop.fs.gs.impl",
+            "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem")
+    .config("spark.hadoop.fs.AbstractFileSystem.gs.impl",
+            "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS")
+    .config("spark.hadoop.fs.gs.project.id", PROJECT_ID)
+    .config("spark.hadoop.google.cloud.auth.service.account.enable", "true")
+    .config(
+        "spark.hadoop.google.cloud.auth.service.account.json.keyfile",
+        ADC_PATH
+    )
     .getOrCreate()
+)
+print("✅ Spark Session Created")
 
 spark.sparkContext.setLogLevel("WARN")
 
