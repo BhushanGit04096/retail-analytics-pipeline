@@ -2,6 +2,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, sum as spark_sum, lit, when, input_file_name
 from pyspark import StorageLevel
 import subprocess
+import os
 
 
 def main():
@@ -14,7 +15,9 @@ def main():
             ["gcloud", "config", "get-value", "project"]
         ).decode().strip()
     except Exception:
-        raise Exception("Unable to detect GCP Project ID. Check your gcloud configuration.")
+        raise Exception(
+            "Unable to detect GCP Project ID. Check your gcloud configuration."
+        )
 
     BUCKET_NAME = f"retail-raw-{PROJECT_ID}"
 
@@ -31,18 +34,9 @@ def main():
     print("=" * 60)
 
     # ==============================
-    # ACCESS TOKEN
-    # ==============================
-    access_token = subprocess.check_output(
-        ["gcloud", "auth", "print-access-token"]
-    ).decode().strip()
-
-    print("✅ Retrieved GCP Access Token")
-
-    # ==============================
     # CREATE SPARK SESSION
     # ==============================
-    spark = (
+    builder = (
         SparkSession.builder
         .appName("RetailDQ")
         .config(
@@ -54,11 +48,22 @@ def main():
             "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS",
         )
         .config("spark.hadoop.fs.gs.project.id", PROJECT_ID)
-        .config("spark.hadoop.fs.gs.auth.service.account.enable", "false")
-        .config("spark.hadoop.fs.gs.auth.access.token.enable", "true")
-        .config("spark.hadoop.fs.gs.auth.access.token", access_token)
-        .getOrCreate()
+        .config(
+            "spark.hadoop.google.cloud.auth.service.account.enable",
+            "false"
+        )
     )
+
+    # If Cloud Shell exposes ADC credentials, use them
+    adc_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if adc_path:
+        print(f"Using ADC credentials: {adc_path}")
+        builder = builder.config(
+            "spark.hadoop.google.cloud.auth.service.account.json.keyfile",
+            adc_path
+        )
+
+    spark = builder.getOrCreate()
 
     print("✅ Spark Session Created")
 
