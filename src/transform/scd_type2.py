@@ -250,18 +250,22 @@ fact = df_orders.join(
 )
 
 fact_final = fact.select(
-    col("order_id"),
-    col("product_sk"),
-    col("customer_sk"),
-    col("store_id"),
-    col("date").alias("order_date"),
-    col("quantity"),
-    col("unit_price"),
-    col("total_amount"),
-    col("channel")
+    df_orders["order_id"],
+    dim_product_df["product_sk"],
+    dim_customer_df["customer_sk"],
+    df_orders["store_id"],
+    dim_date_df["date"].alias("order_date"),
+    df_orders["quantity"],
+    df_orders["unit_price"],
+    df_orders["total_amount"],
+    df_orders["channel"]
 )
-fact_final.write.mode("overwrite").option("header", True).csv(OUTPUT_BASE + "fact_sales/")
-print(f"✅ fact_sales written")
+
+fact_final.write.mode("overwrite") \
+    .option("header", True) \
+    .csv(OUTPUT_BASE + "fact_sales/")
+
+print("✅ fact_sales written")
 
 print("=" * 60)
 print("STAR SCHEMA BUILD COMPLETE")
