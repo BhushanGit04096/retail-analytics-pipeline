@@ -27,7 +27,7 @@ print(f"🔍 Project ID: {PROJECT_ID}")
 print(f"🔍 Output base: {OUTPUT_BASE}")
 
 # === CREATE SPARK SESSION ===
-ADC_PATH = "/tmp/tmp.zoEsahDyyc/application_default_credentials.json"
+ADC_PATH = "/tmp/tmp.d1fW6vl8XD/application_default_credentials.json"
 spark = (
     SparkSession.builder
     .appName("SCDType2_StarSchema")
