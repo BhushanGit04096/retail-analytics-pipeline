@@ -36,23 +36,27 @@ def main():
     # ==============================
     # CREATE SPARK SESSION
     # ==============================
-    builder = (
-        SparkSession.builder
-        .appName("RetailDQ")
-        .config(
-            "spark.hadoop.fs.gs.impl",
-            "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem",
-        )
-        .config(
-            "spark.hadoop.fs.AbstractFileSystem.gs.impl",
-            "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS",
-        )
-        .config("spark.hadoop.fs.gs.project.id", PROJECT_ID)
-        .config(
-            "spark.hadoop.google.cloud.auth.service.account.enable",
-            "false"
-        )
+   builder = (
+    SparkSession.builder
+    .appName("RetailDQ")
+    .config(
+        "spark.hadoop.fs.gs.impl",
+        "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem",
     )
+    .config(
+        "spark.hadoop.fs.AbstractFileSystem.gs.impl",
+        "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS",
+    )
+    .config("spark.hadoop.fs.gs.project.id", PROJECT_ID)
+    .config(
+        "spark.hadoop.google.cloud.auth.service.account.enable",
+        "true"
+    )
+    .config(
+        "spark.hadoop.google.cloud.auth.service.account.json.keyfile",
+        "/tmp/tmp.zoEsahDyyc/application_default_credentials.json"
+    )
+)
 
     # If Cloud Shell exposes ADC credentials, use them
     adc_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
