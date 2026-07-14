@@ -1,101 +1,207 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, sum as spark_sum, lit, when, input_file_name
+from pyspark import StorageLevel
 import subprocess
 
-# === AUTO-DETECT PROJECT ID (NO NEED TO EDIT MANUALLY) ===
-try:
-    PROJECT_ID = subprocess.check_output(['gcloud', 'config', 'get-value', 'project']).decode().strip()
-except:
-    # Fallback in case gcloud fails (just hardcode it here if you want)
-    PROJECT_ID = "YOUR_PROJECT_ID_HERE"  # <-- Only change this if auto-detect fails
 
-BUCKET_NAME = f"retail-raw-{PROJECT_ID}"
-INPUT_PATH = f"gs://{BUCKET_NAME}/date=*/channel=*/orders.csv"
-STAGING_PATH = f"gs://{BUCKET_NAME}/staging/"
-QUARANTINE_PATH = f"gs://{BUCKET_NAME}/quarantine/"
+def main():
 
-print(f"🔍 Project ID: {PROJECT_ID}")
-print(f"🔍 Reading data from: {INPUT_PATH}")
+    # ==============================
+    # AUTO-DETECT PROJECT ID
+    # ==============================
+    try:
+        PROJECT_ID = subprocess.check_output(
+            ["gcloud", "config", "get-value", "project"]
+        ).decode().strip()
+    except Exception:
+        raise Exception("Unable to detect GCP Project ID. Check your gcloud configuration.")
 
-# === GET ACCESS TOKEN FROM GCLOUD ===
-access_token = subprocess.check_output(['gcloud', 'auth', 'print-access-token']).decode().strip()
-print("✅ Retrieved access token")
+    BUCKET_NAME = f"retail-raw-{PROJECT_ID}"
 
-# === INIT SPARK WITH GCS CONNECTOR + ACCESS TOKEN ===
-spark = SparkSession.builder \
-    .appName("RetailDQ") \
-    .config("spark.hadoop.fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem") \
-    .config("spark.hadoop.fs.AbstractFileSystem.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS") \
-    .config("spark.hadoop.fs.gs.project.id", PROJECT_ID) \
-    .config("spark.hadoop.fs.gs.auth.service.account.enable", "false") \
-    .config("spark.hadoop.fs.gs.auth.access.token.enable", "true") \
-    .config("spark.hadoop.fs.gs.auth.access.token", access_token) \
-    .getOrCreate()
+    INPUT_PATH = f"gs://{BUCKET_NAME}/date=*/channel=*/orders.csv"
+    STAGING_PATH = f"gs://{BUCKET_NAME}/staging/"
+    QUARANTINE_PATH = f"gs://{BUCKET_NAME}/quarantine/"
 
-# === READ DATA ===
-df = spark.read.option("header", True).csv(INPUT_PATH)
-df = df.withColumn("source_file", input_file_name())
+    print("=" * 60)
+    print("RETAIL DATA QUALITY PIPELINE")
+    print("=" * 60)
+    print(f"Project ID     : {PROJECT_ID}")
+    print(f"Bucket         : {BUCKET_NAME}")
+    print(f"Input Path     : {INPUT_PATH}")
+    print("=" * 60)
 
-total_count = df.count()
-print(f"📊 Total rows read: {total_count}")
+    # ==============================
+    # ACCESS TOKEN
+    # ==============================
+    access_token = subprocess.check_output(
+        ["gcloud", "auth", "print-access-token"]
+    ).decode().strip()
 
-# === 1. NULL CHECKS ===
-null_checks = df.select(
-    spark_sum(col("order_id").isNull().cast("int")).alias("null_order_id"),
-    spark_sum(col("customer_id").isNull().cast("int")).alias("null_customer_id"),
-    spark_sum(col("product_id").isNull().cast("int")).alias("null_product_id"),
-    spark_sum(col("store_id").isNull().cast("int")).alias("null_store_id")
-).collect()[0]
+    print("✅ Retrieved GCP Access Token")
 
-# === 2. DUPLICATE CHECK ===
-duplicate_count = df.groupBy("order_id").count().filter(col("count") > 1).count()
-print(f"🔁 Duplicate order_ids found: {duplicate_count}")
+    # ==============================
+    # CREATE SPARK SESSION
+    # ==============================
+    spark = (
+        SparkSession.builder
+        .appName("RetailDQ")
+        .config(
+            "spark.hadoop.fs.gs.impl",
+            "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem",
+        )
+        .config(
+            "spark.hadoop.fs.AbstractFileSystem.gs.impl",
+            "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS",
+        )
+        .config("spark.hadoop.fs.gs.project.id", PROJECT_ID)
+        .config("spark.hadoop.fs.gs.auth.service.account.enable", "false")
+        .config("spark.hadoop.fs.gs.auth.access.token.enable", "true")
+        .config("spark.hadoop.fs.gs.auth.access.token", access_token)
+        .getOrCreate()
+    )
 
-# === 3. REFERENTIAL INTEGRITY ===
-valid_product_ids = [str(i) for i in range(1, 501)]
-invalid_product_count = df.filter(~col("product_id").isin(valid_product_ids)).count()
-print(f"🚫 Rows with invalid product_id: {invalid_product_count}")
+    print("✅ Spark Session Created")
 
-# === FLAG BAD ROWS ===
-df_flagged = df.withColumn(
-    "dq_failed",
-    when(
-        (col("order_id").isNull()) |
-        (col("customer_id").isNull()) |
-        (col("product_id").isNull()) |
-        (col("store_id").isNull()) |
-        (~col("product_id").isin(valid_product_ids)),
-        lit(True)
-    ).otherwise(lit(False))
-)
+    # ==============================
+    # READ DATA
+    # ==============================
+    print("\nReading data from Cloud Storage...")
 
-df_passed = df_flagged.filter(col("dq_failed") == False).drop("dq_failed", "source_file")
-df_failed = df_flagged.filter(col("dq_failed") == True).drop("dq_failed")
+    df = (
+        spark.read
+        .option("header", True)
+        .csv(INPUT_PATH)
+        .withColumn("source_file", input_file_name())
+    )
 
-print(f"✅ Passed: {df_passed.count()} rows")
-print(f"❌ Failed: {df_failed.count()} rows")
+    df.persist(StorageLevel.MEMORY_AND_DISK)
 
-# === WRITE TO GCS ===
-if df_passed.count() > 0:
-    df_passed.write.mode("overwrite").option("header", True).csv(STAGING_PATH)
-    print(f"✅ Wrote passed data to: {STAGING_PATH}")
+    print("\nSchema:")
+    df.printSchema()
 
-if df_failed.count() > 0:
-    df_failed.write.mode("overwrite").option("header", True).csv(QUARANTINE_PATH)
-    print(f"⚠️ Wrote failed data to: {QUARANTINE_PATH}")
+    print("\nSample Data:")
+    df.show(5, truncate=False)
 
-# === SUMMARY ===
-print("=" * 50)
-print("DATA QUALITY SUMMARY")
-print(f"Total rows: {total_count}")
-print(f"Null order_id: {null_checks.null_order_id}")
-print(f"Null customer_id: {null_checks.null_customer_id}")
-print(f"Null product_id: {null_checks.null_product_id}")
-print(f"Null store_id: {null_checks.null_store_id}")
-print(f"Duplicates: {duplicate_count}")
-print(f"Invalid Products: {invalid_product_count}")
-print(f"Passed: {df_passed.count()}")
-print(f"Failed: {df_failed.count()}")
-print("=" * 50)
+    total_count = df.count()
 
-spark.stop()
+    print(f"\n✅ Successfully read {total_count} rows")
+
+    # ==============================
+    # NULL CHECKS
+    # ==============================
+    null_checks = (
+        df.select(
+            spark_sum(col("order_id").isNull().cast("int")).alias("null_order_id"),
+            spark_sum(col("customer_id").isNull().cast("int")).alias("null_customer_id"),
+            spark_sum(col("product_id").isNull().cast("int")).alias("null_product_id"),
+            spark_sum(col("store_id").isNull().cast("int")).alias("null_store_id"),
+        )
+        .collect()[0]
+    )
+
+    # ==============================
+    # DUPLICATE CHECK
+    # ==============================
+    duplicate_count = (
+        df.groupBy("order_id")
+        .count()
+        .filter(col("count") > 1)
+        .count()
+    )
+
+    # ==============================
+    # REFERENTIAL INTEGRITY
+    # ==============================
+    valid_product_ids = [str(i) for i in range(1, 501)]
+
+    invalid_product_count = (
+        df.filter(~col("product_id").isin(valid_product_ids))
+        .count()
+    )
+
+    # ==============================
+    # FLAG BAD RECORDS
+    # ==============================
+    df_flagged = df.withColumn(
+        "dq_failed",
+        when(
+            (
+                col("order_id").isNull()
+                | col("customer_id").isNull()
+                | col("product_id").isNull()
+                | col("store_id").isNull()
+                | (~col("product_id").isin(valid_product_ids))
+            ),
+            lit(True),
+        ).otherwise(lit(False)),
+    )
+
+    df_passed = (
+        df_flagged
+        .filter(col("dq_failed") == False)
+        .drop("dq_failed", "source_file")
+    )
+
+    df_failed = (
+        df_flagged
+        .filter(col("dq_failed") == True)
+        .drop("dq_failed")
+    )
+
+    passed_count = df_passed.count()
+    failed_count = df_failed.count()
+
+    print(f"\n✅ Passed Rows : {passed_count}")
+    print(f"❌ Failed Rows : {failed_count}")
+
+    # ==============================
+    # WRITE OUTPUT
+    # ==============================
+    if passed_count > 0:
+        (
+            df_passed.write
+            .mode("overwrite")
+            .option("header", True)
+            .csv(STAGING_PATH)
+        )
+        print(f"\n✅ Clean data written to:")
+        print(STAGING_PATH)
+
+    if failed_count > 0:
+        (
+            df_failed.write
+            .mode("overwrite")
+            .option("header", True)
+            .csv(QUARANTINE_PATH)
+        )
+        print(f"\n⚠️ Bad records written to:")
+        print(QUARANTINE_PATH)
+
+    # ==============================
+    # SUMMARY
+    # ==============================
+    print("\n" + "=" * 60)
+    print("DATA QUALITY SUMMARY")
+    print("=" * 60)
+
+    print(f"Total Rows            : {total_count}")
+    print(f"Null order_id         : {null_checks.null_order_id}")
+    print(f"Null customer_id      : {null_checks.null_customer_id}")
+    print(f"Null product_id       : {null_checks.null_product_id}")
+    print(f"Null store_id         : {null_checks.null_store_id}")
+    print(f"Duplicate order_ids   : {duplicate_count}")
+    print(f"Invalid product_ids   : {invalid_product_count}")
+    print(f"Passed Rows           : {passed_count}")
+    print(f"Failed Rows           : {failed_count}")
+
+    print("=" * 60)
+
+    df.unpersist()
+
+    spark.stop()
+
+    print("\n🎉 Data Quality Pipeline Completed Successfully!")
+
+
+if __name__ == "__main__":
+    main()
