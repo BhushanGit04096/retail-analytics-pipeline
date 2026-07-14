@@ -50,14 +50,18 @@ spark.sparkContext.setLogLevel("WARN")
 # =============================================
 # 1. READ STAGING DATA
 # =============================================
-df_orders = spark.read.option("header", True).csv(STAGING_PATH)
-df_orders = df_orders.withColumn("order_date", to_date(col("order_date"), "yyyy-MM-dd")) \
-                     .withColumn("quantity", col("quantity").cast("int")) \
-                     .withColumn("unit_price", col("unit_price").cast("double")) \
-                     .withColumn("total_amount", col("total_amount").cast("double")) \
-                     .withColumn("customer_id", col("customer_id").cast("int")) \
-                     .withColumn("product_id", col("product_id").cast("int")) \
-                     .withColumn("store_id", col("store_id").cast("int"))
+df_orders = (
+    spark.read
+    .option("header", True)
+    .csv(STAGING_PATH)
+    .withColumn("order_date", to_date(col("order_date"), "yyyy-MM-dd"))
+    .withColumn("quantity", col("quantity").cast("int"))
+    .withColumn("unit_price", col("unit_price").cast("double"))
+    .withColumn("total_amount", col("quantity") * col("unit_price"))
+    .withColumn("customer_id", col("customer_id").cast("int"))
+    .withColumn("product_id", col("product_id").cast("int"))
+    .withColumn("store_id", col("store_id").cast("int"))
+)
 
 df_orders.cache()
 print(f"📊 Loaded {df_orders.count()} rows from staging")
